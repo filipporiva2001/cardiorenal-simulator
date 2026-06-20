@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Renal-Cardiovascular Flow Bench — Digital Twin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#23262b; --bg-panel:#2c2f36; --bg-panel-2:#33373f;
+    --ink:#eef0f3; --ink-dim:#9aa1ad; --line:#3d4148;
+    --accent:#e7b34b; --fluid:#4fb6e8; --good:#5fb88a; --warn:#d9714e;
+  }
+  *{box-sizing:border-box;}
+  html, body{ margin:0; padding:0; height:100%; overflow:hidden; }
+  body{ background:var(--bg); color:var(--ink); font-family:'Inter',sans-serif; }
+  .app{
+    display:grid; grid-template-columns: 1.4fr 1fr;
+    height:100vh; width:100vw; background:var(--line); gap:1px;
+  }
+  @media(max-width:900px){
+    .app{ grid-template-columns:1fr; grid-template-rows: 45vh 55vh; height:100vh; }
+  }
+  #scene-wrap{ position:relative; background:#1c1e22; height:100%; overflow:hidden; }
+  #scene-wrap canvas{ display:block; width:100%; height:100%; }
+  #panel{
+    background:var(--bg-panel); padding:20px;
+    display:flex; flex-direction:column; gap:14px;
+    height:100%; overflow-y:auto; -webkit-overflow-scrolling: touch;
+  }
+  .card{ background:var(--bg-panel-2); border:1px solid var(--line); border-radius:6px; padding:14px 16px; }
+  .card h2{ font-family:'IBM Plex Mono',monospace; font-size:11px; text-transform:uppercase; letter-spacing:0.12em; color:var(--ink-dim); margin:0 0 12px 0; }
+  .arteriole-btns{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
+  .arteriole-btns button{
+    background:var(--bg-panel); border:1px solid var(--line); color:var(--ink-dim);
+    border-radius:5px; padding:9px 6px; font-family:'IBM Plex Mono',monospace;
+    font-size:11px; font-weight:700; cursor:pointer; transition:all .15s; text-align:center; line-height:1.4;
+  }
+  .arteriole-btns button:hover{ color:var(--ink); border-color:var(--fluid); }
+  .arteriole-btns button.active-healthy{ background:var(--good); color:#0d2233; border-color:var(--good); }
+  .arteriole-btns button.active-constriction{ background:var(--warn); color:#1d1d1d; border-color:var(--warn); }
+  .arteriole-btns button.active-dilation{ background:var(--accent); color:#1d1d1d; border-color:var(--accent); }
+  .big-btn{ border:none; border-radius:5px; padding:10px 14px; font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:700; cursor:pointer; width:100%; transition:background .15s; margin-top:8px; display:block; }
+  #pump-toggle{ background:var(--good); color:#0d2233; }
+  #pump-toggle.off{ background:var(--warn); color:#1d1d1d; }
+  #tap-toggle{ background:var(--fluid); color:#0d2233; }
+  #tap-toggle.closed{ background:var(--bg-panel); color:var(--ink-dim); border:1px solid var(--line); }
+  #v5-btn{ background:var(--good); color:#0d2233; }
+  #v5-btn.closed{ background:var(--warn); color:#1d1d1d; }
+  #reset-btn{ background:var(--accent); color:#1d1d1d; }
+  #chart-reset-btn{ background:var(--bg-panel); color:var(--ink-dim); border:1px solid var(--line); }
+  #sim-start-btn{ background:var(--good); color:#0d2233; font-size:13px; padding:13px; }
+  #sim-start-btn.running{ background:var(--warn); color:#1d1d1d; }
+  #sim-status{ font-family:'IBM Plex Mono',monospace; font-size:11px; padding:6px 10px; border-radius:4px; margin-top:8px; text-align:center; border:1px solid var(--line); background:var(--bg-panel); color:var(--ink-dim); }
+  #sim-status.running{ border-color:var(--good); color:var(--good); }
+  #sim-status.paused{ border-color:var(--warn); color:var(--warn); }
+  #circuit-status{ font-family:'IBM Plex Mono',monospace; font-size:11.5px; padding:7px 10px; border-radius:4px; margin-top:8px; background:var(--bg-panel); border:1px solid var(--line); color:var(--ink-dim); text-align:center; }
+  #circuit-status.full{ border-color:var(--good); color:var(--good); }
+  #circuit-status.low{ border-color:var(--warn); color:var(--warn); }
+  #circuit-status.filling{ border-color:var(--fluid); color:var(--fluid); }
+  .fill-bar-wrap{ margin-top:10px; }
+  .fill-bar-label{ font-size:11px; color:var(--ink-dim); display:flex; justify-content:space-between; margin-bottom:5px; }
+  .fill-bar-label span:last-child{ font-family:'IBM Plex Mono',monospace; font-weight:700; color:var(--ink); }
+  .fill-bar{ height:12px; background:var(--line); border-radius:6px; overflow:hidden; }
+  .fill-bar-fill{ height:100%; background:var(--fluid); border-radius:6px; transition:width .3s; }
+  .fill-bar-fill.low{ background:var(--warn); }
+  .fill-bar-fill.full{ background:var(--good); }
+  .measurement-row{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin-bottom:10px; }
+  .measurement-row:last-child{ margin-bottom:0; }
+  .mhero-stat{ background:var(--bg-panel); border:1px solid var(--line); border-radius:6px; padding:12px; text-align:center; }
+  .mhero-stat .mlabel{ font-size:10px; text-transform:uppercase; letter-spacing:0.1em; color:var(--ink-dim); margin-bottom:6px; }
+  .mhero-stat .mvalue{ font-family:'IBM Plex Mono',monospace; font-size:24px; font-weight:700; color:var(--ink); line-height:1; }
+  .mhero-stat .munit{ font-size:10px; color:var(--ink-dim); margin-top:3px; }
+  .mhero-stat.primary{ border-color:var(--fluid); }
+  .mhero-stat.primary .mvalue{ color:var(--fluid); }
+  .mhero-stat.renal{ border-color:var(--accent); }
+  .mhero-stat.renal .mvalue{ color:var(--accent); }
+  .collection-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .collect-stat{ background:var(--bg-panel); border:1px solid var(--line); border-radius:5px; padding:10px 12px; }
+  .collect-stat .label{ font-size:10px; text-transform:uppercase; letter-spacing:0.08em; color:var(--ink-dim); margin-bottom:4px; }
+  .collect-stat .value{ font-family:'IBM Plex Mono',monospace; font-size:20px; font-weight:700; color:var(--ink); }
+  .collect-stat .unit{ font-size:10px; color:var(--ink-dim); }
+  #collect-status{ font-family:'IBM Plex Mono',monospace; font-size:11px; padding:7px 10px; border-radius:4px; margin-top:10px; text-align:center; border:1px solid var(--line); background:var(--bg-panel); color:var(--ink-dim); }
+  #collect-status.active{ border-color:var(--good); color:var(--good); }
+  #chart-card canvas{ width:100%; height:280px; display:block; border-radius:4px; cursor:grab; touch-action:none; }
+  #chart-card canvas:active{ cursor:grabbing; }
+  .chart-hint{ font-size:10.5px; color:var(--ink-dim); margin-top:6px; text-align:center; }
+  .comp-btns{ display:flex; flex-direction:column; gap:8px; }
+  .comp-btns button{
+    background:var(--bg-panel); border:1px solid var(--line); color:var(--ink);
+    border-radius:5px; padding:10px 12px; font-family:'IBM Plex Mono',monospace;
+    font-size:11.5px; font-weight:700; cursor:pointer; transition:all .15s; text-align:left;
+  }
+  .comp-btns button:hover{ border-color:var(--fluid); }
+  .comp-btns button.active{ background:var(--accent); color:#1d1d1d; border-color:var(--accent); }
+  #comp-clear-btn{ background:var(--bg-panel); color:var(--ink-dim); border:1px solid var(--line); margin-top:8px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div id="scene-wrap"><canvas id="scene"></canvas></div>
+  <div id="panel">
+
+    <div class="card">
+      <h2>Scenario presets</h2>
+      <div id="scenario-grid"></div>
+    </div>
+
+    <div class="card">
+      <h2>Middle tube &#8212; cardiovascular (P1 &#8596; P2)</h2>
+      <div class="arteriole-btns" id="middle-btns">
+        <button data-key="small">Vasoconstriction<br><span style="font-size:10px;opacity:0.7">&#190; in</span></button>
+        <button data-key="medium" class="active-healthy">Healthy<br><span style="font-size:10px;opacity:0.7">1 in</span></button>
+        <button data-key="large">Vasodilation<br><span style="font-size:10px;opacity:0.7">1&#188; in</span></button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Afferent arteriole (P3 &#8594; Valve 5)</h2>
+      <div class="arteriole-btns" id="afferent-btns">
+        <button data-key="small">Vasoconstriction<br><span style="font-size:10px;opacity:0.7">&#190; in</span></button>
+        <button data-key="medium" class="active-healthy">Healthy<br><span style="font-size:10px;opacity:0.7">1 in</span></button>
+        <button data-key="large">Vasodilation<br><span style="font-size:10px;opacity:0.7">1&#188; in</span></button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Efferent arteriole (Valve 5 &#8594; P4)</h2>
+      <div class="arteriole-btns" id="efferent-btns">
+        <button data-key="small">Vasoconstriction<br><span style="font-size:10px;opacity:0.7">&#190; in</span></button>
+        <button data-key="medium" class="active-healthy">Healthy<br><span style="font-size:10px;opacity:0.7">1 in</span></button>
+        <button data-key="large">Vasodilation<br><span style="font-size:10px;opacity:0.7">1&#188; in</span></button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Glomerulus / Valve 5</h2>
+      <label>Filter opening: <span id="v5-val">100%</span></label><br>
+      <input type="range" id="v5-slider" min="0" max="100" value="100" step="1">
+      <button id="v5-btn" class="big-btn">Valve 5: Open (click to close)</button>
+    </div>
+
+    <div class="card">
+      <h2>Branch valves</h2>
+      <label><input type="checkbox" id="v1-toggle"> Valve 1</label><br>
+      <label><input type="checkbox" id="v2-toggle" checked> Valve 2</label><br>
+      <label><input type="checkbox" id="v3-toggle" checked> Valve 3</label><br>
+      <label><input type="checkbox" id="v4-toggle" checked> Valve 4</label>
+    </div>
+
+    <!-- COMPENSATORY MECHANISM — simplified, no before/after panel -->
+    <div class="card">
+      <h2>Compensatory mechanism (Activity 5)</h2>
+      <div class="comp-btns">
+        <button id="comp-aff-constr" data-mech="aff_constr">
+          Afferent Vasoconstriction Response<br>
+          <span style="font-size:10px;opacity:0.7">small afferent tube + closes Valve 2 to 30%</span>
+        </button>
+        <button id="comp-aff-dilat" data-mech="aff_dilat">
+          Afferent Vasodilation Response<br>
+          <span style="font-size:10px;opacity:0.7">large afferent tube + opens Valve 1</span>
+        </button>
+        <button id="comp-nephro" data-mech="nephro">
+          Nephrolithiasis Response<br>
+          <span style="font-size:10px;opacity:0.7">small aff/eff tubes + closes Valve 2 to 70%</span>
+        </button>
+      </div>
+      <button id="comp-clear-btn" class="big-btn">Clear compensation &#8212; back to normal</button>
+    </div>
+
+    <div class="card">
+      <h2>Pump &amp; circuit fill</h2>
+      <div class="fill-bar-wrap">
+        <div class="fill-bar-label"><span>Circuit fill level</span><span id="funnel-pct">0%</span></div>
+        <div class="fill-bar"><div class="fill-bar-fill" id="funnel-bar" style="width:0%"></div></div>
+      </div>
+      <div id="circuit-status">Empty &#8212; open tap to fill before starting</div>
+      <button id="tap-toggle" class="big-btn closed">Open tap to fill circuit</button>
+      <button id="pump-toggle" class="big-btn">Pump: Stopped (click to start)</button>
+    </div>
+
+    <div class="card">
+      <h2>Live measurements</h2>
+      <div class="measurement-row">
+        <div class="mhero-stat primary">
+          <div class="mlabel">&#916;P1 (P1&#8722;P2)</div>
+          <div class="mvalue" id="live-dp1">&#8212;</div>
+          <div class="munit">psi</div>
+        </div>
+        <div class="mhero-stat">
+          <div class="mlabel">Flow Q</div>
+          <div class="mvalue" id="live-q">&#8212;</div>
+          <div class="munit">mL/s</div>
+        </div>
+        <div class="mhero-stat">
+          <div class="mlabel">Resistance R</div>
+          <div class="mvalue" id="live-r">&#8212;</div>
+          <div class="munit">&#215; baseline</div>
+        </div>
+      </div>
+      <div class="measurement-row">
+        <div class="mhero-stat renal">
+          <div class="mlabel">&#916;P2 (P3&#8722;P4)</div>
+          <div class="mvalue" id="live-dp2">&#8212;</div>
+          <div class="munit">psi</div>
+        </div>
+        <div class="mhero-stat renal">
+          <div class="mlabel">GFR</div>
+          <div class="mvalue" id="live-gfr2">&#8212;</div>
+          <div class="munit">mL/min</div>
+        </div>
+        <div class="mhero-stat">
+          <div class="mlabel">Filtrate rate</div>
+          <div class="mvalue" id="live-frate">&#8212;</div>
+          <div class="munit">mL/10s</div>
+        </div>
+      </div>
+      <p style="font-size:10.5px;color:var(--ink-dim);margin:10px 0 0;text-align:center;">
+        These update live as you adjust the setup. Press <b>Start Simulation</b> below to begin recording.
+      </p>
+    </div>
+
+    <div class="card" id="chart-card">
+      <h2>Pressure vs time (P1, P2, P3, P4)</h2>
+      <canvas id="pressure-chart"></canvas>
+      <div class="chart-hint">Drag to pan &middot; Scroll to zoom</div>
+      <button id="chart-reset-btn" class="big-btn">Reset view to live</button>
+      <button id="sim-start-btn" class="big-btn">&#9654; Start Simulation</button>
+      <div id="sim-status">Setup mode &#8212; adjust valves and tubes freely</div>
+    </div>
+
+    <div class="card">
+      <h2>Filtrate collection</h2>
+      <div class="collection-grid">
+        <div class="collect-stat">
+          <div class="label">Elapsed time</div>
+          <div class="value"><span id="timer-val">0:00</span><span class="unit"> m:ss</span></div>
+        </div>
+        <div class="collect-stat">
+          <div class="label">Volume collected</div>
+          <div class="value"><span id="volume-val">0.0</span><span class="unit"> mL</span></div>
+        </div>
+        <div class="collect-stat">
+          <div class="label">GFR</div>
+          <div class="value"><span id="gfr-live">0.0</span><span class="unit"> mL/min</span></div>
+        </div>
+        <div class="collect-stat">
+          <div class="label">Cylinder fill</div>
+          <div class="value"><span id="cyl-pct">0</span><span class="unit"> %</span></div>
+        </div>
+      </div>
+      <div id="collect-status">Open Valve 5 to start collecting</div>
+    </div>
+
+    <div class="card">
+      <h2>Reset measurements</h2>
+      <button id="reset-btn" class="big-btn">Reset &#8212; clear cylinder &amp; timer</button>
+    </div>
+
+  </div>
+</div>
+<script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
+<script src="scene.js"></script>
+<script src="physics.js"></script>
+<script src="chart.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
